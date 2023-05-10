@@ -30,6 +30,16 @@ interface DatabaseEntry {
     [s: string]: any;
 }
 
+export interface DatabaseInterface {
+    getEntries(type: EntityType[]): DatabaseEntry[];
+    insert(DatabaseEntry: DatabaseEntry): void;
+    update(DatabaseEntry: DatabaseEntry, write: boolean): void;
+    remove(ID: number): void;
+    has(ID: number): boolean;
+    newID(): number;
+    write(): void;
+}
+
 enum GreenPowerEvents {
     deviceJoined = "deviceJoined",
 }

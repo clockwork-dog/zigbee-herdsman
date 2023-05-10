@@ -18,6 +18,7 @@ import * as Utils from "../src/utils";
 import { isTypedArray } from "util/types";
 import Bonjour, {BrowserConfig, Service} from 'bonjour-service';
 import {LoggerStub} from "../src/controller/logger-stub";
+import {DatabaseInterface} from "../src/controller/tstype";
 const globalSetImmediate = setImmediate;
 const flushPromises = () => new Promise(globalSetImmediate);
 
@@ -462,7 +463,7 @@ const events = {
 
 const backupPath = getTempFile('backup');
 
-const options = {
+const commonOptions = {
     network: {
         panID: 0x1a63,
         channelList: [15],
@@ -473,10 +474,27 @@ const options = {
         path: '/dummy/conbee',
         adapter: null,
     },
-    databasePath: getTempFile('database'),
-    databaseBackupPath: null,
     backupPath,
     acceptJoiningDeviceHandler: null,
+};
+const options = {
+    ...commonOptions,
+    databasePath: getTempFile('database'),
+    databaseBackupPath: null,
+};
+
+const mockCustomDatabase: DatabaseInterface = {
+    getEntries: jest.fn(() => []),
+    insert: jest.fn(),
+    update: jest.fn(),
+    remove: jest.fn(),
+    has: jest.fn(() => false),
+    newID: jest.fn(),
+    write: jest.fn(),
+}
+const customDatabaseOptions = {
+    ...commonOptions,
+    database: mockCustomDatabase,
 }
 
 const databaseContents = () => fs.readFileSync(options.databasePath).toString();
@@ -4835,4 +4853,28 @@ describe('Controller', () => {
 
 });
 
+describe('CustomDatabaseController', () => {
+    let controller;
 
+    beforeAll(async () => {
+        jest.useFakeTimers({doNotFake: ['setTimeout']});
+        Date.now = jest.fn()
+        Date.now.mockReturnValue(150);
+    });
+
+    afterAll(async () => {
+        jest.useRealTimers();
+    });
+
+    beforeEach(async () => {
+        controller = new Controller(customDatabaseOptions);
+        mocksRestore.forEach((m) => m.mockRestore());
+        mocksClear.forEach((m) => m.mockClear());
+        restoreMocksendZclFrameToEndpoint();
+    });
+
+    it('Call controller constructor options mixed with default options', async () => {
+        await controller.start();
+        expect(ZStackAdapter).toBeCalledWith({"networkKeyDistribute":false,"networkKey":[1,3,5,7,9,11,13,15,0,2,4,6,8,10,12,13],"panID":6755,"extendedPanID":[221,221,221,221,221,221,221,221],"channelList":[15]}, {"baudRate": 115200, "path": "/dummy/conbee", "rtscts": true, "adapter": null}, backupPath, {"disableLED": false}, undefined);
+    });
+});

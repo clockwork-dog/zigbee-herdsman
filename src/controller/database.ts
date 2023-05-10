@@ -1,12 +1,12 @@
 import fs from 'fs';
 import Debug from "debug";
-import {DatabaseEntry, EntityType} from './tstype';
+import {DatabaseInterface, DatabaseEntry, EntityType} from './tstype';
 
 const debug = {
     log: Debug('zigbee-herdsman:controller:database:log'),
 };
 
-class Database {
+class Database implements DatabaseInterface {
     private entries: {[id: number]: DatabaseEntry};
     private path: string;
 

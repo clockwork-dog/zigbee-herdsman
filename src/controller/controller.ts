@@ -4,7 +4,7 @@ import {TsType as AdapterTsType, Adapter, Events as AdapterEvents} from '../adap
 import {Entity, Device} from './model';
 import {ZclFrameConverter} from './helpers';
 import * as Events from './events';
-import {KeyValue, DeviceType, GreenPowerEvents, GreenPowerDeviceJoinedPayload} from './tstype';
+import {KeyValue, DatabaseInterface, DeviceType, GreenPowerEvents, GreenPowerDeviceJoinedPayload} from './tstype';
 import Debug from "debug";
 import fs from 'fs';
 import {Utils as ZclUtils, FrameControl} from '../zcl';
@@ -19,11 +19,9 @@ import mixin from 'mixin-deep';
 import Group from './model/group';
 import {LoggerStub} from "./logger-stub";
 
-interface Options {
+interface CommonOptions {
     network: AdapterTsType.NetworkOptions;
     serialPort: AdapterTsType.SerialPortOptions;
-    databasePath: string;
-    databaseBackupPath: string;
     backupPath: string;
     adapter: AdapterTsType.AdapterOptions;
     /**
@@ -33,6 +31,14 @@ interface Options {
      */
     acceptJoiningDeviceHandler: (ieeeAddr: string) => Promise<boolean>;
 }
+interface DatabasePathOptions {
+    databasePath: string;
+    databaseBackupPath: string | null;
+}
+interface DatabaseImplOptions {
+    database: DatabaseInterface;
+}
+type Options = CommonOptions & (DatabasePathOptions | DatabaseImplOptions);
 
 async function catcho(func: () => Promise<void>, errorMessage: string): Promise<void> {
     try {
@@ -42,7 +48,7 @@ async function catcho(func: () => Promise<void>, errorMessage: string): Promise<
     }
 }
 
-const DefaultOptions: Options = {
+const DefaultOptions: CommonOptions = {
     network: {
         networkKeyDistribute: false,
         networkKey: [0x01, 0x03, 0x05, 0x07, 0x09, 0x0B, 0x0D, 0x0F, 0x00, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0D],
@@ -51,8 +57,6 @@ const DefaultOptions: Options = {
         channelList: [11],
     },
     serialPort: {},
-    databasePath: null,
-    databaseBackupPath: null,
     backupPath: null,
     adapter: {disableLED: false},
     acceptJoiningDeviceHandler: null,
@@ -68,7 +72,7 @@ const debug = {
  */
 class Controller extends events.EventEmitter {
     private options: Options;
-    private database: Database;
+    private database: DatabaseInterface;
     private adapter: Adapter;
     private greenPower: GreenPower;
     // eslint-disable-next-line
@@ -121,8 +125,15 @@ class Controller extends events.EventEmitter {
      * Start the Herdsman controller
      */
     public async start(): Promise<AdapterTsType.StartResult> {
-        // Database (create end inject)
-        this.database = Database.open(this.options.databasePath);
+        // Database create or use
+        if ('databasePath' in this.options) {
+            // Create an instance using the path
+            this.database = Database.open(this.options.databasePath);
+        } else {
+            // Use the instance of the database interface that was passed in
+            this.database = this.options.database;
+        }
+        // Inject
         Entity.injectDatabase(this.database);
 
         // Adapter (create and inject)
@@ -149,7 +160,11 @@ class Controller extends events.EventEmitter {
         this.adapter.on(AdapterEvents.Events.networkAddress, this.onNetworkAddress.bind(this));
 
         if (startResult === 'reset') {
-            if (this.options.databaseBackupPath && fs.existsSync(this.options.databasePath)) {
+            if (
+                "databasePath" in this.options &&
+                this.options.databaseBackupPath &&
+                fs.existsSync(this.options.databasePath)
+            ) {
                 fs.copyFileSync(this.options.databasePath, this.options.databaseBackupPath);
             }
 
